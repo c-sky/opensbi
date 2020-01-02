@@ -121,6 +121,43 @@ static int c910_system_shutdown(u32 type)
 	return 0;
 }
 
+void sbi_set_pmu()
+{
+	unsigned long interrupts;
+
+	interrupts = csr_read(CSR_MIDELEG) | (1 << 17);
+	csr_write(CSR_MIDELEG, interrupts);
+
+	/* CSR_MCOUNTEREN has already been set in mstatus_init() */
+	csr_write(CSR_MCOUNTERWEN, 0xffffffff);
+	csr_write(CSR_MHPMEVENT3, 1);
+	csr_write(CSR_MHPMEVENT4, 2);
+	csr_write(CSR_MHPMEVENT5, 3);
+	csr_write(CSR_MHPMEVENT6, 4);
+	csr_write(CSR_MHPMEVENT7, 5);
+	csr_write(CSR_MHPMEVENT8, 6);
+	csr_write(CSR_MHPMEVENT9, 7);
+	csr_write(CSR_MHPMEVENT10, 8);
+	csr_write(CSR_MHPMEVENT11, 9);
+	csr_write(CSR_MHPMEVENT12, 10);
+	csr_write(CSR_MHPMEVENT13, 11);
+	csr_write(CSR_MHPMEVENT14, 12);
+	csr_write(CSR_MHPMEVENT15, 13);
+	csr_write(CSR_MHPMEVENT16, 14);
+	csr_write(CSR_MHPMEVENT17, 15);
+	csr_write(CSR_MHPMEVENT18, 16);
+	csr_write(CSR_MHPMEVENT19, 17);
+	csr_write(CSR_MHPMEVENT20, 18);
+	csr_write(CSR_MHPMEVENT21, 19);
+	csr_write(CSR_MHPMEVENT22, 20);
+	csr_write(CSR_MHPMEVENT23, 21);
+	csr_write(CSR_MHPMEVENT24, 22);
+	csr_write(CSR_MHPMEVENT25, 23);
+	csr_write(CSR_MHPMEVENT26, 24);
+	csr_write(CSR_MHPMEVENT27, 25);
+	csr_write(CSR_MHPMEVENT28, 26);
+}
+
 void sbi_boot_other_core(int hartid)
 {
 	csr_write(CSR_MRVBR, FW_TEXT_START);
@@ -135,6 +172,9 @@ static int c910_vendor_ext_provider(long extid, long funcid,
 	switch (extid) {
 	case SBI_EXT_VENDOR_C910_BOOT_OTHER_CORE:
 		sbi_boot_other_core((int)args[0]);
+		break;
+	case SBI_EXT_VENDOR_C910_SET_PMU:
+		sbi_set_pmu();
 		break;
 	default:
 		sbi_printf("Unsupported private sbi call: %ld\n", extid);
