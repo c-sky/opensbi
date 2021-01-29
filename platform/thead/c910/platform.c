@@ -116,7 +116,7 @@ static int c910_system_reset(u32 type)
 
 int c910_hart_start(u32 hartid, ulong saddr)
 {
-	csr_write(CSR_MRVBR, saddr);
+	csr_write(CSR_MRVBR, FW_TEXT_START);
 	csr_write(CSR_MRMR, csr_read(CSR_MRMR) | (1 << hartid));
 
 	return 0;
