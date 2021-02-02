@@ -68,8 +68,23 @@ static int c910_early_init(bool cold_boot)
 	return 0;
 }
 
+static void c910_delegate_more_traps()
+{
+	unsigned long exceptions = csr_read(CSR_MEDELEG);
+
+	/* Delegate 0 ~ 7 exceptions to S-mode */
+	exceptions |= ((1U << CAUSE_MISALIGNED_FETCH) | (1U << CAUSE_FETCH_ACCESS) |
+		(1U << CAUSE_ILLEGAL_INSTRUCTION) | (1U << CAUSE_BREAKPOINT) |
+		(1U << CAUSE_MISALIGNED_LOAD) | (1U << CAUSE_LOAD_ACCESS) |
+		(1U << CAUSE_MISALIGNED_STORE) | (1U << CAUSE_STORE_ACCESS));
+
+	csr_write(CSR_MEDELEG, exceptions);
+}
+
 static int c910_final_init(bool cold_boot)
 {
+	c910_delegate_more_traps();
+
 	return 0;
 }
 
