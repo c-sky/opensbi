@@ -7,6 +7,7 @@
 #include <sbi/sbi_console.h>
 #include <sbi/sbi_const.h>
 #include <sbi/sbi_hart.h>
+#include <sbi/sbi_hsm.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_platform.h>
 #include <sbi_utils/irqchip/plic.h>
@@ -265,12 +266,21 @@ void sbi_set_pmu(unsigned long type, unsigned long idx, unsigned long event_id)
 	}
 }
 
+void sbi_boot_other_core(int hartid, unsigned long saddr)
+{
+	sbi_hsm_hart_start(sbi_scratch_thishart_ptr(),
+		hartid, saddr, 0);
+}
+
 static int c910_vendor_ext_provider(long extid, long funcid,
 				unsigned long *args,
 				unsigned long *out_value,
 				struct sbi_trap_info *out_trap)
 {
 	switch (extid) {
+	case SBI_EXT_VENDOR_C910_BOOT_OTHER_CORE:
+		sbi_boot_other_core(args[0], args[1]);
+		break;
 	case SBI_EXT_VENDOR_C910_SET_PMU:
 		sbi_set_pmu(args[0], args[1], args[2]);
 		break;
