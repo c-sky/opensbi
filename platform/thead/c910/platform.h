@@ -19,6 +19,9 @@
 #define CSR_PLIC_BASE    0xfc1
 #define CSR_MRMR         0x7c6
 #define CSR_MRVBR        0x7c7
+#define CSR_MCOUNTERWEN  0x7c9
+
+#define SBI_EXT_VENDOR_C910_SET_PMU            0x09000001
 
 #define C910_PLIC_CLINT_OFFSET     0x04000000  /* 64M */
 #define C910_PLIC_DELEG_OFFSET     0x001ffffc
