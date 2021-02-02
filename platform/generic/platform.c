@@ -10,6 +10,7 @@
 #include <libfdt.h>
 #include <platform_override.h>
 #include <sbi/riscv_asm.h>
+#include <sbi/riscv_io.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_platform.h>
 #include <sbi/sbi_string.h>
@@ -183,10 +184,10 @@ static u64 generic_tlbr_flush_limit(void)
 
 static int generic_system_reset(u32 reset_type)
 {
-	if (generic_plat && generic_plat->system_reset)
-		return generic_plat->system_reset(reset_type,
-						  generic_plat_match);
-	return fdt_system_reset(reset_type);
+#define VIRT_TEST_ADDR			0x100000
+#define VIRT_TEST_FINISHER_PASS		0x5555
+	writew(VIRT_TEST_FINISHER_PASS, (void *)VIRT_TEST_ADDR);
+	return 0;
 }
 
 const struct sbi_platform_operations platform_ops = {
