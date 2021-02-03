@@ -14,6 +14,7 @@
 #include <sbi_utils/serial/uart8250.h>
 #include <sbi_utils/sys/clint.h>
 #include <sbi_utils/serial/fdt_serial.h>
+#include <sbi_utils/fdt/fdt_helper.h>
 #include "platform.h"
 
 static struct c910_regs_struct c910_regs;
@@ -25,20 +26,71 @@ static struct clint_data clint = {
 	.has_64bit_mmio = FALSE,
 };
 
+unsigned long mcpuid, sub_revision;
+struct pmp pmp_addr[32] = {{0, 0}};
+unsigned long pmp_attr[9] = {0};
+unsigned long pmp_base, pmp_entry, pmp_cfg, mrvbr, mrmr;
+
+static void parse_dts()
+{
+	void *fdt = sbi_scratch_thishart_arg1_ptr();
+
+	fdt_parse_compat_addr(fdt, &pmp_base, "pmp");
+	fdt_parse_compat_addr(fdt, &mrvbr, "mrvbr");
+	fdt_parse_compat_addr(fdt, &mrmr, "mrmr");
+
+	sbi_printf("pmp: 0x%lx\n", pmp_base);
+	sbi_printf("mrvbr: 0x%lx\n", mrvbr);
+	sbi_printf("mrmr: 0x%lx\n", mrmr);
+}
+
 static int c910_early_init(bool cold_boot)
 {
 	if (cold_boot) {
-		/* Load from boot core */
-		c910_regs.pmpaddr0 = csr_read(CSR_PMPADDR0);
-		c910_regs.pmpaddr1 = csr_read(CSR_PMPADDR1);
-		c910_regs.pmpaddr2 = csr_read(CSR_PMPADDR2);
-		c910_regs.pmpaddr3 = csr_read(CSR_PMPADDR3);
-		c910_regs.pmpaddr4 = csr_read(CSR_PMPADDR4);
-		c910_regs.pmpaddr5 = csr_read(CSR_PMPADDR5);
-		c910_regs.pmpaddr6 = csr_read(CSR_PMPADDR6);
-		c910_regs.pmpaddr7 = csr_read(CSR_PMPADDR7);
-		c910_regs.pmpcfg0  = csr_read(CSR_PMPCFG0);
+		parse_dts();
+		pmp_entry = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x100;
+		pmp_cfg = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x0;
 
+		/* Read TWICE!!! */
+		mcpuid = csr_read(CSR_MCPUID);
+		mcpuid = csr_read(CSR_MCPUID);
+
+		/* Get bit [23...18] */
+		sub_revision = (mcpuid & 0xfc0000) >> 18;
+		sbi_printf("sub_revision: %ld\n", sub_revision);
+
+		/* Load from boot core */
+		if (sub_revision < 3) {
+			c910_regs.pmpaddr0 = csr_read(CSR_PMPADDR0);
+			c910_regs.pmpaddr1 = csr_read(CSR_PMPADDR1);
+			c910_regs.pmpaddr2 = csr_read(CSR_PMPADDR2);
+			c910_regs.pmpaddr3 = csr_read(CSR_PMPADDR3);
+			c910_regs.pmpaddr4 = csr_read(CSR_PMPADDR4);
+			c910_regs.pmpaddr5 = csr_read(CSR_PMPADDR5);
+			c910_regs.pmpaddr6 = csr_read(CSR_PMPADDR6);
+			c910_regs.pmpaddr7 = csr_read(CSR_PMPADDR7);
+			c910_regs.pmpcfg0  = csr_read(CSR_PMPCFG0);
+		} else if (sub_revision == 3) {
+			sbi_printf("==============================\n");
+			for (int i = 0, j = 0; i < 32; i++) {
+				pmp_addr[i].start = readl((void *)(pmp_entry + j * 4));
+				sbi_printf("0x%lx\n", pmp_entry + j * 4);
+				j++;
+				pmp_addr[i].end = readl((void *)(pmp_entry + j * 4));
+				sbi_printf("0x%lx\n", pmp_entry + j * 4);
+				j++;
+				sbi_printf("pmp_addr[%d].start: 0x%lx\n", i, pmp_addr[i].start);
+				sbi_printf("pmp_addr[%d].end:   0x%lx\n", i, pmp_addr[i].end);
+			}
+			for (int i = 0; i < 9; i++) {
+				pmp_attr[i] = readl((void *)(pmp_cfg + i * 4));
+				sbi_printf("0x%lx\n", pmp_cfg + i * 4);
+				sbi_printf("pmp_attr[%d]:    0x%lx\n", i, pmp_attr[i]);
+			}
+		}
+
+		if (sub_revision == 3)
+			c910_regs.msmpr     = csr_read(CSR_MSMPR);
 		c910_regs.mcor     = csr_read(CSR_MCOR);
 		c910_regs.mhcr     = csr_read(CSR_MHCR);
 		c910_regs.mccr2    = csr_read(CSR_MCCR2);
@@ -50,16 +102,32 @@ static int c910_early_init(bool cold_boot)
 			c910_regs.plic_base_addr + C910_PLIC_CLINT_OFFSET;
 	} else {
 		/* Store to other core */
-		csr_write(CSR_PMPADDR0, c910_regs.pmpaddr0);
-		csr_write(CSR_PMPADDR1, c910_regs.pmpaddr1);
-		csr_write(CSR_PMPADDR2, c910_regs.pmpaddr2);
-		csr_write(CSR_PMPADDR3, c910_regs.pmpaddr3);
-		csr_write(CSR_PMPADDR4, c910_regs.pmpaddr4);
-		csr_write(CSR_PMPADDR5, c910_regs.pmpaddr5);
-		csr_write(CSR_PMPADDR6, c910_regs.pmpaddr6);
-		csr_write(CSR_PMPADDR7, c910_regs.pmpaddr7);
-		csr_write(CSR_PMPCFG0, c910_regs.pmpcfg0);
+		if (sub_revision < 3) {
+			csr_write(CSR_PMPADDR0, c910_regs.pmpaddr0);
+			csr_write(CSR_PMPADDR1, c910_regs.pmpaddr1);
+			csr_write(CSR_PMPADDR2, c910_regs.pmpaddr2);
+			csr_write(CSR_PMPADDR3, c910_regs.pmpaddr3);
+			csr_write(CSR_PMPADDR4, c910_regs.pmpaddr4);
+			csr_write(CSR_PMPADDR5, c910_regs.pmpaddr5);
+			csr_write(CSR_PMPADDR6, c910_regs.pmpaddr6);
+			csr_write(CSR_PMPADDR7, c910_regs.pmpaddr7);
+			csr_write(CSR_PMPCFG0, c910_regs.pmpcfg0);
+		} else if (sub_revision == 3) {
+			sbi_printf("##############################\n");
+			for (int i = 0, j = 0; i < 32; i++) {
+				writel(pmp_addr[i].start, (void *)(pmp_entry + j * 4));
+				j++;
+				writel(pmp_addr[i].end, (void *)(pmp_entry + j * 4));
+				j++;
+				sbi_printf("pmp_addr[%d].start: 0x%lx\n", i, pmp_addr[i].start);
+				sbi_printf("pmp_addr[%d].end:   0x%lx\n", i, pmp_addr[i].end);
+			}
+			for (int i = 0; i < 9; i++)
+				 writel(pmp_attr[i], (void *)(pmp_cfg + i * 4));
+		}
 
+		if (sub_revision == 3)
+			csr_write(CSR_MSMPR, c910_regs.msmpr);
 		csr_write(CSR_MCOR, c910_regs.mcor);
 		csr_write(CSR_MHCR, c910_regs.mhcr);
 		csr_write(CSR_MHINT, c910_regs.mhint);
@@ -134,8 +202,23 @@ static int c910_system_reset(u32 type)
 
 int c910_hart_start(u32 hartid, ulong saddr)
 {
-	csr_write(CSR_MRVBR, FW_TEXT_START);
-	csr_write(CSR_MRMR, csr_read(CSR_MRMR) | (1 << hartid));
+	if (sub_revision < 3) {
+		csr_write(CSR_MRVBR, FW_TEXT_START);
+		csr_write(CSR_MRMR, csr_read(CSR_MRMR) | (1 << hartid));
+	} else if (sub_revision == 3) {
+		int val;
+
+		sbi_printf("release other cores:\n");
+		sbi_printf("0x%x ---> 0x%lx\n", readl((void *)mrmr) | (1 << (hartid + 1)), mrmr);
+		sbi_printf("0x%lx ---> 0x%lx\n", (u64)FW_TEXT_START & 0xffffffff, (mrvbr + 8 * hartid));
+		sbi_printf("0x%lx ---> 0x%lx\n", (u64)FW_TEXT_START >> 32, (mrvbr + 4 + 8 * hartid));
+
+		writel((u64)FW_TEXT_START & 0xffffffff, (void *)(mrvbr + 8 * hartid));
+		writel((u64)FW_TEXT_START >> 32,        (void *)(mrvbr + 4 + 8 * hartid));
+		val = readl((void *)mrmr) | (1 << (hartid + 1));
+		writel(val, (void *)mrmr);
+
+	}
 
 	return 0;
 }

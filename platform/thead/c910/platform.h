@@ -20,6 +20,8 @@
 #define CSR_MRMR         0x7c6
 #define CSR_MRVBR        0x7c7
 #define CSR_MCOUNTERWEN  0x7c9
+#define CSR_MCPUID       0xfc0
+#define CSR_MSMPR        0x7f3
 
 #define SBI_EXT_VENDOR_C910_SET_PMU            0x09000001
 #define SBI_EXT_VENDOR_C910_BOOT_OTHER_CORE    0x09000003
@@ -38,6 +40,7 @@ struct c910_regs_struct {
 	u64 pmpaddr6;
 	u64 pmpaddr7;
 	u64 pmpcfg0;
+	u64 msmpr;
 	u64 mcor;
 	u64 mhcr;
 	u64 mccr2;
@@ -45,6 +48,11 @@ struct c910_regs_struct {
 	u64 mxstatus;
 	u64 plic_base_addr;
 	u64 clint_base_addr;
+};
+
+struct pmp {
+	long start;
+	long end;
 };
 
 #endif /* _C910_PLATFORM_H_ */
