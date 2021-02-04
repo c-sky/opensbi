@@ -13,6 +13,7 @@
 #include <sbi_utils/irqchip/plic.h>
 #include <sbi_utils/serial/uart8250.h>
 #include <sbi_utils/sys/clint.h>
+#include <sbi_utils/serial/fdt_serial.h>
 #include "platform.h"
 
 static struct c910_regs_struct c910_regs;
@@ -318,6 +319,12 @@ const struct sbi_platform_operations platform_ops = {
 
 	.timer_init          = c910_timer_init,
 	.timer_event_start   = clint_timer_event_start,
+
+#if 0
+	.console_putc		= fdt_serial_putc,
+	.console_getc		= fdt_serial_getc,
+	.console_init		= fdt_serial_init,
+#endif
 
 	.system_reset        = c910_system_reset,
 
