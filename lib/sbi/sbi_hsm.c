@@ -130,7 +130,6 @@ static void sbi_hsm_hart_wait(struct sbi_scratch *scratch, u32 hartid)
 
 	/* Wait for hart_add call*/
 	while (atomic_read(&hdata->state) != SBI_HART_STARTING) {
-		wfi();
 	};
 
 	/* Restore MIE CSR */

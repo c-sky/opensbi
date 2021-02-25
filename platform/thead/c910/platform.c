@@ -15,6 +15,7 @@
 #include <sbi_utils/sys/clint.h>
 #include <sbi_utils/serial/fdt_serial.h>
 #include <sbi_utils/fdt/fdt_helper.h>
+#include <libfdt.h>
 #include "platform.h"
 
 static struct c910_regs_struct c910_regs;
@@ -26,6 +27,7 @@ static struct clint_data clint = {
 	.has_64bit_mmio = FALSE,
 };
 
+int need_set_cpu = 1;
 unsigned long mcpuid, sub_revision;
 struct pmp pmp_addr[32] = {{0, 0}};
 unsigned long pmp_attr[9] = {0};
@@ -33,6 +35,8 @@ unsigned long pmp_base, pmp_entry, pmp_cfg, mrvbr, mrmr;
 
 static void parse_dts()
 {
+	int off;
+	const void *prop;
 	void *fdt = sbi_scratch_thishart_arg1_ptr();
 
 	fdt_parse_compat_addr(fdt, &pmp_base, "pmp");
@@ -42,12 +46,32 @@ static void parse_dts()
 	sbi_printf("pmp: 0x%lx\n", pmp_base);
 	sbi_printf("mrvbr: 0x%lx\n", mrvbr);
 	sbi_printf("mrmr: 0x%lx\n", mrmr);
+
+	off = fdt_path_offset(fdt, "/core_release");
+	if (off < 0)
+		return;
+
+	prop = fdt_getprop(fdt, off, "set_cpu_type", NULL);
+	sbi_printf("prop: %s\n", (char *)prop);
+	if (!sbi_strcmp(prop, "uboot"))
+		need_set_cpu = 0;
 }
 
 static int c910_early_init(bool cold_boot)
 {
 	if (cold_boot) {
 		parse_dts();
+		c910_regs.plic_base_addr = csr_read(CSR_PLIC_BASE);
+		c910_regs.clint_base_addr =
+			c910_regs.plic_base_addr + C910_PLIC_CLINT_OFFSET;
+	}
+
+	sbi_printf("need_set_cpu: %d\n", need_set_cpu);
+
+	if (!need_set_cpu)
+		return 0;
+
+	if (cold_boot) {
 		pmp_entry = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x100;
 		pmp_cfg = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x0;
 
@@ -96,10 +120,6 @@ static int c910_early_init(bool cold_boot)
 		c910_regs.mccr2    = csr_read(CSR_MCCR2);
 		c910_regs.mhint    = csr_read(CSR_MHINT);
 		c910_regs.mxstatus = csr_read(CSR_MXSTATUS);
-
-		c910_regs.plic_base_addr = csr_read(CSR_PLIC_BASE);
-		c910_regs.clint_base_addr =
-			c910_regs.plic_base_addr + C910_PLIC_CLINT_OFFSET;
 	} else {
 		/* Store to other core */
 		if (sub_revision < 3) {
@@ -202,6 +222,9 @@ static int c910_system_reset(u32 type)
 
 int c910_hart_start(u32 hartid, ulong saddr)
 {
+	if (!need_set_cpu)
+		return 0;
+
 	if (sub_revision < 3) {
 		csr_write(CSR_MRVBR, FW_TEXT_START);
 		csr_write(CSR_MRMR, csr_read(CSR_MRMR) | (1 << hartid));
