@@ -206,6 +206,7 @@ int sbi_hart_pmp_check_addr(struct sbi_scratch *scratch, unsigned long addr,
 	return SBI_OK;
 }
 
+#if 0
 static int pmp_init(struct sbi_scratch *scratch, u32 hartid)
 {
 	u32 i, pmp_idx = 0, pmp_count, count;
@@ -241,6 +242,7 @@ static int pmp_init(struct sbi_scratch *scratch, u32 hartid)
 
 	return 0;
 }
+#endif
 
 /**
  * Check whether a particular hart feature is available
@@ -431,7 +433,7 @@ int sbi_hart_init(struct sbi_scratch *scratch, u32 hartid, bool cold_boot)
 	if (rc)
 		return rc;
 
-	return pmp_init(scratch, hartid);
+	return 0;
 }
 
 void __attribute__((noreturn)) sbi_hart_hang(void)
