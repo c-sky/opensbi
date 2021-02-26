@@ -10,6 +10,7 @@
 #include <sbi/sbi_hsm.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_platform.h>
+#include <sbi/riscv_locks.h>
 #include <sbi_utils/irqchip/plic.h>
 #include <sbi_utils/serial/uart8250.h>
 #include <sbi_utils/sys/clint.h>
@@ -27,6 +28,7 @@ static struct clint_data clint = {
 	.has_64bit_mmio = FALSE,
 };
 
+static spinlock_t init_lock = SPIN_LOCK_INITIALIZER;
 int need_set_cpu = 1;
 unsigned long mcpuid, sub_revision;
 struct pmp pmp_addr[32] = {{0, 0}};
@@ -60,6 +62,14 @@ static void parse_dts()
 static int c910_early_init(bool cold_boot)
 {
 	if (cold_boot) {
+		/* Read TWICE!!! */
+		mcpuid = csr_read(CSR_MCPUID);
+		mcpuid = csr_read(CSR_MCPUID);
+
+		/* Get bit [23...18] */
+		sub_revision = (mcpuid & 0xfc0000) >> 18;
+		sbi_printf("sub_revision: %ld\n", sub_revision);
+
 		parse_dts();
 		c910_regs.plic_base_addr = csr_read(CSR_PLIC_BASE);
 		c910_regs.clint_base_addr =
@@ -71,18 +81,12 @@ static int c910_early_init(bool cold_boot)
 	if (!need_set_cpu)
 		return 0;
 
+	spin_lock(&init_lock);
+
+	pmp_entry = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x100;
+	pmp_cfg = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x0;
+
 	if (cold_boot) {
-		pmp_entry = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x100;
-		pmp_cfg = pmp_base + csr_read(CSR_MHARTID) * 0x4000 + 0x0;
-
-		/* Read TWICE!!! */
-		mcpuid = csr_read(CSR_MCPUID);
-		mcpuid = csr_read(CSR_MCPUID);
-
-		/* Get bit [23...18] */
-		sub_revision = (mcpuid & 0xfc0000) >> 18;
-		sbi_printf("sub_revision: %ld\n", sub_revision);
-
 		/* Load from boot core */
 		if (sub_revision < 3) {
 			c910_regs.pmpaddr0 = csr_read(CSR_PMPADDR0);
@@ -136,14 +140,19 @@ static int c910_early_init(bool cold_boot)
 			sbi_printf("##############################\n");
 			for (int i = 0, j = 0; i < 32; i++) {
 				writel(pmp_addr[i].start, (void *)(pmp_entry + j * 4));
+				sbi_printf("0x%lx\n", pmp_entry + j * 4);
 				j++;
 				writel(pmp_addr[i].end, (void *)(pmp_entry + j * 4));
+				sbi_printf("0x%lx\n", pmp_entry + j * 4);
 				j++;
 				sbi_printf("pmp_addr[%d].start: 0x%lx\n", i, pmp_addr[i].start);
 				sbi_printf("pmp_addr[%d].end:   0x%lx\n", i, pmp_addr[i].end);
 			}
-			for (int i = 0; i < 9; i++)
-				 writel(pmp_attr[i], (void *)(pmp_cfg + i * 4));
+			for (int i = 0; i < 9; i++) {
+				writel(pmp_attr[i], (void *)(pmp_cfg + i * 4));
+				sbi_printf("0x%lx\n", pmp_cfg + i * 4);
+				sbi_printf("pmp_attr[%d]:    0x%lx\n", i, pmp_attr[i]);
+			}
 		}
 
 		if (sub_revision == 3)
@@ -153,6 +162,8 @@ static int c910_early_init(bool cold_boot)
 		csr_write(CSR_MHINT, c910_regs.mhint);
 		csr_write(CSR_MXSTATUS, c910_regs.mxstatus);
 	}
+
+	spin_unlock(&init_lock);
 
 	return 0;
 }
