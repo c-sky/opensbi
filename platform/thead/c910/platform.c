@@ -402,7 +402,7 @@ void sbi_set_pmu(unsigned long type, unsigned long idx, unsigned long event_id)
 void sbi_boot_other_core(int hartid, unsigned long saddr)
 {
 	sbi_hsm_hart_start(sbi_scratch_thishart_ptr(),
-		hartid, saddr, 0);
+		hartid, FW_JUMP_ADDR, 0);
 }
 
 static int c910_vendor_ext_provider(long extid, long funcid,
